@@ -31,7 +31,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
         // In a real production app, we would detect the slug from the subdomain
         // For local dev, we check the 'org_slug' query param or localStorage
-        fetchOrg(slug);
+        fetchOrg();
     }, [authLoading, profiles]); // Dependency on profiles instead of profile.organization_id
 
     const switchOrganization = async (newSlug: string) => {

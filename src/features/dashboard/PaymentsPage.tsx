@@ -285,7 +285,11 @@ function NewPaymentModal({ organization, onClose, onSuccess }: { organization: a
             .eq('organization_id', organization.id)
             .eq('status', 'active');
 
-        setPrograms(data?.map(e => ({ id: e.id, progId: e.program.id, name: e.program.name })) || []);
+        setPrograms(data?.map(e => ({
+            id: e.id,
+            progId: (e.program as any).id,
+            name: (e.program as any).name
+        })) || []);
     };
 
     useEffect(() => {

@@ -51,7 +51,7 @@ export function CreateProgram() {
                 name: formData.name,
                 category: formData.category,
                 description: formData.description,
-                status: 'active',
+                status: 'active' as 'active',
                 start_date: new Date().toISOString().split('T')[0], // Default to today
                 enrollment_fee: formData.enrollment_fee,
                 session_fee: formData.session_fee,

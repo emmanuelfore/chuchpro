@@ -65,6 +65,7 @@ export function CreateSession() {
 
             await sessionService.createSession({
                 ...formData,
+                location_type: formData.location_type as any,
                 program_id: programId,
                 organization_id: organization.id,
                 is_active: true,
