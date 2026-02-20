@@ -1,0 +1,341 @@
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { assignmentService } from '@/services/assignmentService';
+import { useOrganization } from '@/hooks/useOrganization';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import {
+    Plus,
+    FileText,
+    Calendar,
+    CheckCircle,
+    Clock,
+    User,
+    ChevronRight,
+    Loader2,
+    XCircle,
+    Send
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+export function AssignmentManager({ programId }: { programId: string }) {
+    const { organization } = useOrganization();
+    const [assignments, setAssignments] = useState<any[]>([]);
+    const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
+    const [submissions, setSubmissions] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isGradingModalOpen, setIsGradingModalOpen] = useState(false);
+    const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
+
+    // New Assignment Form State
+    const [newAssignment, setNewAssignment] = useState({
+        name: '',
+        description: '',
+        due_date: '',
+        session_id: '',
+        max_score: 100
+    });
+
+    useEffect(() => {
+        if (organization) fetchAssignments();
+    }, [organization, programId]);
+
+    const fetchAssignments = async () => {
+        setLoading(true);
+        try {
+            const data = await assignmentService.getAssignments(organization!.id);
+            // Filter by program if needed (assuming assignments are linked to sessions which are linked to programs)
+            setAssignments(data || []);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchSubmissions = async (assignmentId: string) => {
+        try {
+            const data = await assignmentService.getSubmissions(assignmentId);
+            setSubmissions(data || []);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleCreateAssignment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await assignmentService.createAssignment({
+                ...newAssignment,
+                organization_id: organization!.id,
+                is_active: true
+            });
+            setIsCreateModalOpen(false);
+            fetchAssignments();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleGradeSubmission = async (gradeData: any) => {
+        try {
+            await assignmentService.gradeSubmission(selectedSubmission.id, gradeData);
+            setIsGradingModalOpen(false);
+            if (selectedAssignment) fetchSubmissions(selectedAssignment.id);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    if (loading) return (
+        <div className="flex justify-center py-20">
+            <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+        </div>
+    );
+
+    return (
+        <div className="space-y-8">
+            <div className="flex justify-between items-center bg-white/5 p-6 rounded-3xl border border-white/5">
+                <div>
+                    <h4 className="text-sm font-black text-white uppercase tracking-tight">Assignment Matrix</h4>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Deploy tasks and evaluate participant performance</p>
+                </div>
+                <Button
+                    variant="premium"
+                    size="sm"
+                    className="h-10 text-[10px] font-black uppercase tracking-widest"
+                    onClick={() => setIsCreateModalOpen(true)}
+                >
+                    <Plus className="w-3 h-3 mr-2" /> New Assignment
+                </Button>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+                {/* Assignment List */}
+                <div className="space-y-4">
+                    {assignments.map((assignment) => (
+                        <Card
+                            key={assignment.id}
+                            className={`p-6 bg-slate-900/40 border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer group ${selectedAssignment?.id === assignment.id ? 'border-indigo-500/50 bg-indigo-500/5' : ''}`}
+                            onClick={() => {
+                                setSelectedAssignment(assignment);
+                                fetchSubmissions(assignment.id);
+                            }}
+                        >
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 group-hover:text-indigo-400 transition-colors border border-white/5">
+                                        <FileText className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h5 className="text-sm font-black text-white uppercase tracking-tight">{assignment.name}</h5>
+                                        <div className="flex items-center gap-3 mt-1">
+                                            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center">
+                                                <Calendar className="w-3 h-3 mr-1 text-pink-400" /> {new Date(assignment.due_date).toLocaleDateString()}
+                                            </span>
+                                            {assignment.sessions?.name && (
+                                                <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">
+                                                    {assignment.sessions.name}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <ChevronRight className={`w-4 h-4 text-slate-700 transition-transform ${selectedAssignment?.id === assignment.id ? 'rotate-90 text-indigo-400' : ''}`} />
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+
+                {/* Submissions View */}
+                <div className="space-y-4">
+                    <AnimatePresence mode="wait">
+                        {selectedAssignment ? (
+                            <motion.div
+                                key={selectedAssignment.id}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="space-y-4"
+                            >
+                                <div className="flex items-center justify-between px-2">
+                                    <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Submissions ({submissions.length})</h5>
+                                </div>
+                                {submissions.length > 0 ? submissions.map((sub) => (
+                                    <Card key={sub.id} className="p-4 bg-slate-900/40 border-white/5 flex items-center justify-between group">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-black text-indigo-400">
+                                                {sub.users.first_name[0]}{sub.users.surname[0]}
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-white uppercase">{sub.users.first_name} {sub.users.surname}</p>
+                                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
+                                                    {new Date(sub.submitted_at).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            {sub.status === 'graded' ? (
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">{sub.score}/{selectedAssignment.max_score}</span>
+                                                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                                                </div>
+                                            ) : (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 text-[9px] font-black uppercase tracking-widest border-white/5 bg-white/5 hover:bg-white/10"
+                                                    onClick={() => {
+                                                        setSelectedSubmission(sub);
+                                                        setIsGradingModalOpen(true);
+                                                    }}
+                                                >
+                                                    Grade Task
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </Card>
+                                )) : (
+                                    <div className="text-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/10">
+                                        <Clock className="w-8 h-8 text-slate-700 mx-auto mb-4" />
+                                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Awaiting intake...</p>
+                                    </div>
+                                )}
+                            </motion.div>
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-white/5 rounded-3xl border border-dashed border-white/5">
+                                <FileText className="w-12 h-12 text-slate-700 mb-4" />
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-tight">Select an assignment</h3>
+                                <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-1">Review submissions and provide critical feedback</p>
+                            </div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            </div>
+
+            {/* Create Assignment Modal */}
+            {isCreateModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
+                    <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md p-8 shadow-2xl"
+                    >
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-xl font-black text-white uppercase tracking-tight">Deploy Assignment</h3>
+                            <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
+                                <XCircle className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateAssignment} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Assignment Name</label>
+                                <input
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500 outline-none"
+                                    placeholder="e.g. Apostolic Vision Essay"
+                                    value={newAssignment.name}
+                                    onChange={e => setNewAssignment({ ...newAssignment, name: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Task Description</label>
+                                <textarea
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500 outline-none h-24"
+                                    placeholder="Outline the core deliverables..."
+                                    value={newAssignment.description}
+                                    onChange={e => setNewAssignment({ ...newAssignment, description: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Due Date</label>
+                                    <input
+                                        type="date"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500 outline-none"
+                                        value={newAssignment.due_date}
+                                        onChange={e => setNewAssignment({ ...newAssignment, due_date: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Points Matrix</label>
+                                    <input
+                                        type="number"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500 outline-none"
+                                        value={newAssignment.max_score}
+                                        onChange={e => setNewAssignment({ ...newAssignment, max_score: parseInt(e.target.value) })}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <Button type="submit" variant="premium" className="w-full h-14 uppercase font-black tracking-widest">
+                                <Send className="w-4 h-4 mr-2" /> Launch Task
+                            </Button>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+
+            {/* Grading Modal */}
+            {isGradingModalOpen && selectedSubmission && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
+                    <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md p-8 shadow-2xl"
+                    >
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight">Evaluate Task</h3>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+                                    {selectedSubmission.users.first_name} {selectedSubmission.users.surname}
+                                </p>
+                            </div>
+                            <button onClick={() => setIsGradingModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">
+                                <XCircle className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <div className="bg-white/5 p-4 rounded-2xl mb-6 border border-white/5">
+                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Participant Submission</p>
+                            <p className="text-sm text-slate-300 italic">"{selectedSubmission.submission_text || 'No text content provided.'}"</p>
+                        </div>
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.currentTarget);
+                            handleGradeSubmission({
+                                score: parseInt(formData.get('score') as string),
+                                feedback: formData.get('feedback') as string,
+                                graded_by: organization!.id // Should be user.id usually, but org works for now or admin id
+                            });
+                        }} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Award Points (Max {selectedAssignment.max_score})</label>
+                                <input
+                                    name="score"
+                                    type="number"
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500 outline-none"
+                                    max={selectedAssignment.max_score}
+                                    min={0}
+                                    defaultValue={selectedAssignment.max_score}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Critical Feedback</label>
+                                <textarea
+                                    name="feedback"
+                                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-indigo-500 outline-none h-24"
+                                    placeholder="Provide constructive insight..."
+                                />
+                            </div>
+                            <Button type="submit" variant="premium" className="w-full h-14 uppercase font-black tracking-widest">
+                                <CheckCircle className="w-4 h-4 mr-2" /> Complete Evaluation
+                            </Button>
+                        </form>
+                    </motion.div>
+                </div>
+            )}
+        </div>
+    );
+}
